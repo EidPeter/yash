@@ -1,0 +1,917 @@
+﻿<!DOCTYPE html>
+<html>
+
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>yash</title>
+		<link rel="stylesheet" href="https://stackedit.io/style.css" />
+		<link rel="icon" type="image/x-icon" href="./images/favicon.ico">
+	</head>
+
+	<body class="stackedit">
+		<div class="stackedit__left">
+			<div class="stackedit__toc">
+
+				<ul>
+					<li><a href="#yash-yet-another-shell">yash (Yet Another SHell)</a></li>
+					<li><a href="#i.-introduction">I. Introduction</a>
+						<ul>
+							<li><a href="#i.1-what-is-a-shell">I.1 What is a shell?</a></li>
+							<li><a href="#i.2-history-of-unix-shells">I.2 History of Unix shells</a></li>
+						</ul>
+					</li>
+					<li><a href="#ii.-design-and-implementation">II. Design and Implementation</a>
+						<ul>
+							<li><a href="#ii.1-how-does-a-shell-work">II.1 How does a shell work?</a></li>
+							<ul>
+								<li><a href="#ii.1.1-basic-lifetime-of-a-shell">- II.1.1 Basic lifetime of a shell</a></li>
+								<li><a href="#ii.1.2-basic-workflow-of-the-shell">- II.1.2 Basic workflow of the shell</a></li>
+								<li><a href="#ii.1.3-parsing-and-tokenization">- II.1.3 Parsing and tokenization</a></li>
+								<li><a href="#ii.1.4-putting-it-all-together">- II.1.4 Putting it all together</a></li>
+							</ul>
+							<li><a href="#ii.2-features-and-improvements">II.2 Features and Improvements</a></li>
+							<ul>
+								<li><a href="#ii.2.1-builtins">- II.2.1 Builtins</a></li>
+								<li><a href="#ii.2.2-n-pipes">- II.2.2 N-Pipes</a></li>
+								<li><a href="#ii.2.3-separator">- II.2.3 Separator</a></li>
+								<li><a href="#ii.2.4-batch-mode">- II.2.4 Batch mode</a></li>
+								<li><a href="#ii.2.5-signals">- II.2.5 Signals</a></li>
+							</ul>
+						</ul>
+					</li>
+					<li><a href="#iii.-conclusion">III. Conclusion</a></li>
+				</ul>
+
+			</div>
+		</div>
+		<div class="stackedit__right">
+			<div class="stackedit__html">
+				<h1 id="yash-yet-another-shell">yash (Yet Another SHell)</h1>
+				<p>ULFG II - Sem VII E - OS final project</p>
+				<p>The code can be found <a target="_blank" href="https://github.com/EidPeter/yash">here</a>.</p>
+				<h1 id="i.-introduction">I. Introduction</h1>
+				<h2 id="i.1-what-is-a-shell">I.1 What is a shell?</h2>
+				<p>An <em>Operating System</em> is made of many components, but its two prime components are the
+					<em>kernel</em> and the <em>shell</em>:
+				</p>
+				<p>The <em>kernel</em> is basically the layer on top of the hardware of the computer, which contains
+					basic scripts which lets the software part of applications communicate with the hardware. In other
+					words, the kernel is the actual component of the OS which talks to the hardware, creates the
+					concepts of processes and threads so that both the userspace OS services and the actual user apps
+					can run in a safe manner.</p>
+				<center><img src="./images/os.png" alt="enter image description here"></center>
+				<p>The <em>shell</em>, however, will actually be a “shell” on top of the kernel, and will be written
+					using kernel scripts and system calls, which will create variations of the built in commands of
+					Unix.</p>
+				<p>A <em>shell</em> is a program that takes command inputs from the user’s keyboard and passes them to
+					the machine (and more precisely the <em>kernel</em>) in order to execute them.<br>
+					So in general, a <em>shell</em> is a user interface that allow the user to harness the services of a
+					computer. It can be a command-line interface – like the one we will build- or a graphical user
+					interface.</p>
+				<p>A lot more definitions can be written about the shell. However, in one line -</p>
+				<blockquote>
+					<p>A shell is an interface that allows users to interact with the kernel of an operating system.</p>
+				</blockquote>
+				<h2 id="i.2-history-of-unix-shells">I.2 History of Unix shells</h2>
+				<p>Shells have a long history. It begins with the first Unix shell. Ken Thompson developed the first
+					shell for Unix called the V6 shell in 1971. Similar to its predecessor in Multics, this shell
+					(/bin/sh) was an independent user program that executed outside of the kernel. Though rudimentary by
+					modern standards, it introduced many of the basic features common to all later Unix shells,
+					including piping,and simple control structures using if and goto. Though not in current use, it is
+					still available as part of some Ancient UNIX systems.</p>
+				<p>Beyond the Thompson shell, in 1977, the Bourne shell was introduced. The Bourne shell, created by
+					Stephen Bourne at AT&amp;T Bell Labs for V7 UNIX, remains a useful shell today. The author developed
+					the Bourne shell after working on an ALGOL68 compiler, so its grammar is more similar to the
+					Algorithmic Language (ALGOL) than other shells. The source code itself, although developed in C,
+					even made use of macros to give it an ALGOL68 flavour.</p>
+				<p>The Bourne shell led to the development of other shells, such as the Korn shell (ksh), Almquist shell
+					(ash), and the popular Bourne Again Shell (or Bash).</p>
+				<p>The below figure shows the development of different types of shells:<br>
+					<center><img src="./images/evolution.png" alt="enter image description here"></center>
+				</p>
+				<h1 id="ii.-design-and-implementation">II. Design and Implementation</h1>
+				<h2 id="ii.1-how-does-a-shell-work">II.1 How does a shell work?</h2>
+				<h3 id="ii.1.1-basic-lifetime-of-a-shell">II.1.1 Basic lifetime of a shell</h3>
+				<p>Let’s look at a shell from the top down. A shell does three main things in its lifetime:</p>
+				<ul>
+					<li><strong>Initialize</strong>: the shell reads and executes its configuration files. These change
+						aspects of the shell’s behavior.</li>
+					<li><strong>Interpret</strong>: the shell reads commands from stdin (which could be interactive, or
+						a file) and executes them.</li>
+					<li><strong>Terminate</strong>: After its commands are executed, the shell executes any shutdown
+						commands, frees up any memory, and terminates.</li>
+				</ul>
+				<h3 id="ii.1.2-basic-workflow-of-the-shell">II.1.2 Basic workflow of the shell</h3>
+				<p>When starting up a UNIX shell, this shell will be the main loop which will continuously wait for the
+					user input, parse this input, and at last execute them, and it will reenter the loop to accept new
+					user input. To visualize it better, the workflow of the shell would look like this:</p>
+				<center><img src="./images/workflow.png" alt="enter image description here"></center>
+				<ol>
+					<li>Startup the shell</li>
+					<li>Wait for user input</li>
+					<li>Parse user input</li>
+					<li>Execute the command and return the result</li>
+					<li>Go back to <code>2</code></li>
+				</ol>
+				<p>There is one crucial idea to all of this though: <strong>processes</strong>. The shell is the
+					<em>parent</em> process. This is the <code>main</code> thread of our program which is waiting for
+					user input. However, we cannot execute the command in the <code>main</code> thread itself, because
+					of the following reasons:
+				</p>
+				<ul>
+					<li>An erroneous command will cause the entire shell to stop working, which is not a good user
+						experience and should be avoided at all costs</li>
+					<li>Independent commands should have their own process blocks. This is known as isolation and falls
+						under fault tolerance.</li>
+				</ul>
+				<p>To be able to do this, we will rely heavily on the system call <code>fork</code>.</p>
+				<h4 id="fork">Fork</h4>
+				<p>When <code>fork</code> is called, the operating system makes a duplicate of the process and starts
+					them both running. The original process is called the <strong>parent</strong>, and the new one is
+					called the <strong>child</strong>.</p>
+				<p><code>fork()</code> system call returns twice, once for each process. It returns 0 to the child
+					process, and returns to the parent the process ID number (PID) of its child. This means essentially
+					that the only way for new processes to start is by an existing process duplicating itself.</p>
+				<p>This may sound illogical and counterintuitive. When you want to run a new process, you don’t just
+					want another copy of the same program – you want to run a different program. That’s what the
+					<code>exec()</code> (and its variations <code>execl</code>, <code>execv</code>, <code>execvp</code>,
+					<code>execle</code>, <code>execve</code>, <code>execlp</code>, …) system call is all about.
+				</p>
+				<p><code>exec()</code> replaces the current running program with an entirely new one. This means that
+					when you call <code>exec</code>, the operating system stops your process, loads up the new program,
+					and starts that one in its place. A process never returns from an <code>exec()</code> call (unless
+					there’s an error).</p>
+				<p>With these two system calls in place, we have the underlying infrastructure for how most programs are
+					run on Unix. First, an existing process forks itself into two separate ones. Then, the child uses
+					<code>exec()</code> to replace itself with a new program. The parent process can continue doing
+					other things, and it can even keep tabs on its children, using the system call <code>wait()</code>
+					(or one of its variants like <code>waitpid()</code>).
+				</p>
+				<h4 id="exec">Exec</h4>
+				<p>To quote the linux <code>man</code> pages,</p>
+				<blockquote>
+					<p>The exec() family of functions replaces the current process image with a new process image.</p>
+				</blockquote>
+				<p>For our needs, we will use <code>execvp</code> whose signature looks like this:</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">int</span> <span class="token function">execvp</span><span class="token punctuation">(</span><span class="token keyword">const</span> <span class="token keyword">char</span> <span class="token operator">*</span>file<span class="token punctuation">,</span> <span class="token keyword">char</span> <span class="token operator">*</span><span class="token keyword">const</span> argv<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre>
+				<p>Let us take at an example usage, which executes the command <code>ls -l -h -a</code>:</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">char</span> <span class="token operator">*</span>argv<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{</span><span class="token string">"ls"</span><span class="token punctuation">,</span> <span class="token string">"-l"</span><span class="token punctuation">,</span> <span class="token string">"-h"</span><span class="token punctuation">,</span> <span class="token string">"-a"</span><span class="token punctuation">,</span> <span class="token constant">NULL</span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+<span class="token function">execvp</span><span class="token punctuation">(</span>argv<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> argv<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre>
+				<p>A few things to note about the <code>execvp</code> function:</p>
+				<ul>
+					<li>The first argument is the name of the command (or file) to be executed, for which it will search
+						in the <code>$PATH</code> system</li>
+					<li>The second argument is an array consisting of the command and the arguments passed to the
+						command itself. It must also be terminated by <code>NULL</code></li>
+					<li>It also swaps out the current process image with that of the command being executed</li>
+				</ul>
+				<p>Now that we know how to execute commands, we need to develop a way to read and parse user input.</p>
+				<h3 id="ii.1.3-parsing-and-tokenization">II.1.3 Parsing and tokenization</h3>
+				<p>A <em>parser</em> scans input and breaks it down to tokens. A <em>token</em> consists of one or more
+					characters (letters, digits, symbols), and represents a single unit of input. For example, a token
+					can be a variable name, a keyword, a number, or an arithmetic operator.</p>
+				<p>The parser takes these tokens, groups them together, and creates a special structure we call the
+					<em>Abstract Syntax Tree</em>. You can think of the <em>AST</em> as a high level representation of
+					the command line you gave to the shell. The parser takes the AST and passes it to the executor,
+					which reads the AST and executes the parsed command.
+				</p>
+				<p>This is where the <em>GNU Readline</em> library comes into play. The GNU Readline library provides a
+					set of functions for use by applications that allow users to edit command lines as they are typed
+					in. Both Emacs and vi editing modes are available. The Readline library includes additional
+					functions to maintain a list of previously-entered command lines, to recall and perhaps reedit those
+					lines, and perform csh-like history expansion on previous commands. It provides tab auto-completion
+					for files and folders, forward and reverse history look-up using arrows and special keyboard
+					shortcuts, and a lot more features.</p>
+				<p>After reading, parsing, and possibly adding the user input into the command history, we need to
+					tokenize it in order to pass it to the executor.</p>
+				<p>Let us take a look at the following function. which takes a string as the <code>input</code>. We use
+					the function <code>strtok</code> (available in the <code>string.h</code> library) to split the
+					string by the<code>space</code> character and return an array of strings instead. We also terminate
+					the array by <code>NULL</code>.</p>
+				<pre><code>tokenizer.c
+</code></pre>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"tokenizer.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdlib.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;string.h&gt;</span></span>
+
+<span class="token keyword">char</span>  <span class="token operator">*</span><span class="token operator">*</span><span class="token function">tokenize</span><span class="token punctuation">(</span><span class="token keyword">char</span>  <span class="token operator">*</span>input<span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">char</span>  <span class="token operator">*</span><span class="token operator">*</span>command  <span class="token operator">=</span>  <span class="token function">malloc</span><span class="token punctuation">(</span><span class="token number">16</span>  <span class="token operator">*</span>  <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">char</span>  <span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>command  <span class="token operator">==</span>  <span class="token constant">NULL</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"malloc failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	
+	<span class="token keyword">char</span>  <span class="token operator">*</span>separator  <span class="token operator">=</span>  <span class="token string">" "</span><span class="token punctuation">;</span>
+	<span class="token keyword">char</span>  <span class="token operator">*</span>parsed<span class="token punctuation">;</span>
+	<span class="token keyword">int</span>  index  <span class="token operator">=</span>  <span class="token number">0</span><span class="token punctuation">;</span>
+	parsed  <span class="token operator">=</span>  <span class="token function">strtok</span><span class="token punctuation">(</span>input<span class="token punctuation">,</span> separator<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token keyword">while</span> <span class="token punctuation">(</span>parsed  <span class="token operator">!=</span>  <span class="token constant">NULL</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		command<span class="token punctuation">[</span>index<span class="token punctuation">]</span> <span class="token operator">=</span>  parsed<span class="token punctuation">;</span>
+		index<span class="token operator">++</span><span class="token punctuation">;</span>
+		parsed  <span class="token operator">=</span>  <span class="token function">strtok</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">,</span> separator<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	
+	command<span class="token punctuation">[</span>index<span class="token punctuation">]</span> <span class="token operator">=</span>  <span class="token constant">NULL</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span>  command<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>Currently our command buffer allocates 16 blocks only. If we enter a command which has more than 16
+					words, our command will not work as expected. This has been done only to keep the example easy to
+					understand, since there is no rule that dictates the input buffer size.</p>
+				<p>As an example, if the <code>input</code> to the <code>tokenize</code> function is the string
+					<code>"ls -l -h -a"</code>, then the function will create an array of the form
+					<code>{"ls", "-l", "-h", "-a", NULL}</code> and return the pointer to this array.
+				</p>
+				<h3 id="ii.1.4-putting-it-all-together">II.1.4 Putting it all together</h3>
+				<p>Now that we have the basic building blocks of the shell, we will do the following:</p>
+				<center><img src="./images/loop.png" alt="enter image description here"></center>
+				<ol>
+					<li>Accept the command as user input</li>
+					<li>Call <code>fork</code> to create a child process</li>
+					<li>Execute the command in the child process while the parent waits for the command to complete</li>
+					<li>Return back to step 1</li>
+				</ol>
+				<p>We invoke <code>readline()</code> to read input from the user, and pass it to <code>tokenize()</code>
+					function defined previously. Once the input has been parsed, we <code>fork</code> the
+					<code>main</code> process and call <code>execvp</code> in the child process. Before we dive into the
+					code, let us take a look at the following diagram, to understand the semantics of
+					<code>execvp</code> first:
+				</p>
+				<center><img src="./images/fork.png" alt="enter image description here"></center>
+				<p>When the <code>fork</code> command completes, the child is an exact copy of the parent process.
+					However, when we invoke <code>execvp</code>, it replaces the current program with the program passed
+					to it in the arguments. What this means is that although the current text, data, heap and stack
+					segments of the process are replaced, the process id still remains unchanged, but the program gets
+					overwritten completely. If the invocation is successful, then <code>execvp</code> never returns, and
+					any code in the child after this will not be executed.</p>
+				<p>Before we take a look at the main shell loop, we will create our own custom prompt, colorized, and
+					displaying the current working directory of the shell:</p>
+				<pre><code>prompt.c
+</code></pre>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"prompt.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;readline/readline.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdlib.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;unistd.h&gt;</span></span>
+
+<span class="token macro property">#<span class="token directive keyword">define</span>  KCYN  "\x1B[36m" </span><span class="token comment">// White color</span>
+<span class="token macro property">#<span class="token directive keyword">define</span>  KGRN  "\x1B[32m" </span><span class="token comment">// Green color</span>
+<span class="token macro property">#<span class="token directive keyword">define</span>  KWHT  "\x1B[37m" </span><span class="token comment">// White color</span>
+<span class="token macro property">#<span class="token directive keyword">define</span>  PATH_MAX  256    </span>
+
+<span class="token keyword">char</span>  <span class="token operator">*</span>input<span class="token punctuation">;</span>
+<span class="token keyword">char</span>  cwd<span class="token punctuation">[</span>PATH_MAX<span class="token punctuation">]</span><span class="token punctuation">;</span>
+
+<span class="token keyword">char</span>  <span class="token operator">*</span><span class="token function">prompt</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">getcwd</span><span class="token punctuation">(</span>cwd<span class="token punctuation">,</span> <span class="token keyword">sizeof</span><span class="token punctuation">(</span>cwd<span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">!=</span>  <span class="token constant">NULL</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%syash: "</span><span class="token punctuation">,</span> KCYN<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%s%s"</span><span class="token punctuation">,</span> KGRN<span class="token punctuation">,</span> cwd<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%s\n"</span><span class="token punctuation">,</span> KWHT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		input  <span class="token operator">=</span>  <span class="token function">readline</span><span class="token punctuation">(</span><span class="token string">"$ "</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span>  input<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%syash: "</span><span class="token punctuation">,</span> KCYN<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%s"</span><span class="token punctuation">,</span> KWHT<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		input  <span class="token operator">=</span>  <span class="token function">readline</span><span class="token punctuation">(</span><span class="token string">"$ "</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">return</span>  input<span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<blockquote>
+					<p>NOTE: In order to use the <code>readline()</code> library, it should be installed from your
+						distro’s package manager. e.g. on Ubuntu and Debian based distributions, use the following
+						command:</p>
+					<p><code>sudo apt install libreadline-dev</code></p>
+				</blockquote>
+				<p>Our prompt now looks like this:<br>
+					<img src="./images/prompt.png" alt="enter image description here">
+				</p>
+				<p>Back to the main shell loop, we will add some error handling, notably for <code>fork</code> (if the
+					operating system reaches the maximum number of allowed processes or runs out of memory, a child
+					process will not be created and <code>fork</code> will return -1), and <code>execvp</code>: (it
+					returns -1 if the execution fails, but never returns following a successful invocation).</p>
+				<p>The main function now looks roughly like the following snippet of code:</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">int</span>  <span class="token function">main</span><span class="token punctuation">(</span><span class="token keyword">int</span>  argc<span class="token punctuation">,</span> <span class="token keyword">char</span>  <span class="token operator">*</span>argv<span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">char</span>  <span class="token operator">*</span><span class="token operator">*</span>command<span class="token punctuation">;</span>
+	<span class="token keyword">char</span>  <span class="token operator">*</span>input<span class="token punctuation">;</span>
+	pid_t child_pid<span class="token punctuation">;</span>
+	<span class="token keyword">int</span> stat_loc<span class="token punctuation">;</span>
+	<span class="token keyword">do</span>
+	<span class="token punctuation">{</span>
+		input <span class="token operator">=</span>  <span class="token function">prompt</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		command <span class="token operator">=</span>  <span class="token function">tokenize</span><span class="token punctuation">(</span>input<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		child_pid <span class="token operator">=</span>  <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>child_pid <span class="token operator">&lt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"Fork failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>  <span class="token keyword">if</span> <span class="token punctuation">(</span>child_pid <span class="token operator">==</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">execvp</span><span class="token punctuation">(</span>command<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> command<span class="token punctuation">)</span> <span class="token operator">&lt;</span>  <span class="token number">0</span>
+			<span class="token punctuation">{</span>
+				<span class="token function">perror</span><span class="token punctuation">(</span>command<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">// terminate child</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>
+		<span class="token punctuation">{</span>
+			<span class="token function">waitpid</span><span class="token punctuation">(</span>child_pid<span class="token punctuation">,</span> <span class="token operator">&amp;</span>stat_loc<span class="token punctuation">,</span> WUNTRACED<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>input<span class="token punctuation">)</span>
+			<span class="token function">free</span><span class="token punctuation">(</span>input<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>command<span class="token punctuation">)</span>
+			<span class="token function">free</span><span class="token punctuation">(</span>command<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			
+	<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token keyword">return</span>  <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>After compiling and running the code, let us try some basic shell commands.<br>
+					<img src="./images/main.png" alt="enter image description here">
+				</p>
+				<p>And that’s it! We’ve just finished writing our very first niche Linux shell!</p>
+				<h2 id="ii.2-features-and-improvements">II.2 Features and Improvements</h2>
+				<h3 id="ii.2.1-builtins">II.2.1 Builtins</h3>
+				<p>Although our shell currently works and executes system programs, it doesn’t do anything more
+					advanced. Even if you try to execute the <code>cd</code> command, you will get an error that says:
+				</p>
+				<pre class=" language-sh"><code class="prism  language-sh">cd: No such file or directory
+</code></pre>
+				<p>Our shell does not recognize the <code>cd</code> command just yet. Most commands a shell executes are
+					system programs like <code>ls</code> or <code>pwd</code>, but not all of them. Some of them are
+					built right into the shell.</p>
+				<p>The reason is actually pretty simple. If you want to change directory, you need to use the function
+					<code>chdir()</code>. The thing is, the current directory is a property of a process. So, if you
+					wrote a program called <code>cd</code> that changed directory, it would just change its own current
+					directory, and then terminate. Its parent process’s current directory would be unchanged. Instead,
+					the shell process itself needs to execute <code>chdir()</code>, so that its own current directory is
+					updated. Then, when it launches child processes, they will inherit that directory too.
+				</p>
+				<p>Similarly, if there was a program named <code>exit</code>, it wouldn’t be able to exit the shell that
+					called it. That command also needs to be built into the shell.</p>
+				<p>Thus, to support <code>cd</code> we will have to implement it on our own. We also need to ensure
+					that, if the command entered by the user is <code>cd</code> (or belongs to a list of predefined
+					built-in commands), we will not <code>fork</code> the process at all. Instead, we will execute our
+					implementation of <code>cd</code> (or any other built-in) and move on to wait for the next user
+					input.</p>
+				<h4 id="cd-change-directory">cd (change directory)</h4>
+				<p>Thankfully, for <code>cd</code>, we have the <code>chdir</code> function call available to us and
+					using it is straightforward. It accepts the path as an argument and returns 0 upon success and -1
+					upon a failure.</p>
+				<pre><code>cd.c
+</code></pre>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"cd.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;string.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;unistd.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdlib.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdio.h&gt;</span></span>
+
+<span class="token keyword">int</span>  <span class="token function">cd</span><span class="token punctuation">(</span><span class="token keyword">char</span>  <span class="token operator">*</span><span class="token operator">*</span>args<span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span>args<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">==</span>  <span class="token constant">NULL</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token comment">// if no argument provided, cd to HOME (like bash)</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">chdir</span><span class="token punctuation">(</span><span class="token function">getenv</span><span class="token punctuation">(</span><span class="token string">"HOME"</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">!=</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"cd failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">return</span>  <span class="token number">3</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">else</span>
+	<span class="token punctuation">{</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">chdir</span><span class="token punctuation">(</span>args<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token operator">!=</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"cd failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">return</span>  <span class="token number">3</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span>  <span class="token number">1</span><span class="token punctuation">;</span>
+
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>Demo:<br>
+					<img src="./images/cd.png" alt="enter image description here">
+				</p>
+				<h4 id="history">history</h4>
+				<p>The GNU Readline library provides a history expansion in the <code>&lt;readline/history.h&gt;</code>.
+					We call <code>add_history(char* input)</code> to add the command to the commands history. Command
+					history can then be accessed using keyboard arrows, or special keybindings (like
+					<code>Ctrl-R</code>). In order to retrieve the history programmatically to replicate the
+					<code>history</code> command, we create a wrapper around the <code>history_list()</code> function.
+					The history built-in code is presented below.
+				</p>
+				<pre><code>history.c
+</code></pre>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"history.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdlib.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;string.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;unistd.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;readline/history.h&gt;</span></span>
+  
+<span class="token comment">// State of history list (offset, length, size)</span>
+HISTORY_STATE  <span class="token operator">*</span>myhist<span class="token punctuation">;</span>
+
+<span class="token comment">// Retrieve history list</span>
+HIST_ENTRY  <span class="token operator">*</span><span class="token operator">*</span>mylist<span class="token punctuation">;</span>
+
+<span class="token comment">// Display history</span>
+<span class="token keyword">void</span>  <span class="token function">display_history</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	myhist  <span class="token operator">=</span>  <span class="token function">history_get_history_state</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	mylist  <span class="token operator">=</span>  <span class="token function">history_list</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Session history:\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span>  i  <span class="token operator">=</span>  <span class="token number">0</span><span class="token punctuation">;</span> i  <span class="token operator">&lt;</span>  myhist<span class="token operator">-&gt;</span>length<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token comment">//output history list</span>
+		<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"%d\t%s\n"</span><span class="token punctuation">,</span> i  <span class="token operator">+</span>  <span class="token number">1</span><span class="token punctuation">,</span> mylist<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token operator">-&gt;</span>line<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// Free buffer blocks allocated to the history</span>
+<span class="token keyword">void</span>  <span class="token function">free_history</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>myhist<span class="token punctuation">)</span>
+		<span class="token function">free</span><span class="token punctuation">(</span>myhist<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">// free HIST_ENTRY list</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>mylist<span class="token punctuation">)</span>
+		<span class="token function">free</span><span class="token punctuation">(</span>mylist<span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment">// free HISTORY_STATE</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>Demo:<br>
+					<img src="./images/history.png" alt="enter image description here">
+				</p>
+				<h4 id="piecing-built-ins-together">Piecing built-ins together</h4>
+				<p>We can now add <code>builtins.c</code> file that checks if the command input by the user belongs to
+					the list of predefined built-in commands (in our case <code>cd</code> and <code>history</code>) and
+					executes it if it is the case.</p>
+				<pre><code>builtins.c
+</code></pre>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdbool.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;string.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"cd.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"history.h"</span></span>
+
+<span class="token keyword">char</span>  <span class="token operator">*</span>builtins<span class="token punctuation">[</span><span class="token punctuation">]</span>  <span class="token operator">=</span> <span class="token punctuation">{</span><span class="token string">"cd"</span><span class="token punctuation">,</span> <span class="token string">"history"</span><span class="token punctuation">}</span><span class="token punctuation">;</span>
+<span class="token keyword">int</span>  builtins_count  <span class="token operator">=</span>  <span class="token keyword">sizeof</span>  builtins  <span class="token operator">/</span>  <span class="token keyword">sizeof</span>  builtins<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+
+bool  <span class="token function">check_if_builtin</span><span class="token punctuation">(</span><span class="token keyword">char</span>  <span class="token operator">*</span>input<span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span><span class="token keyword">int</span>  i  <span class="token operator">=</span>  <span class="token number">0</span><span class="token punctuation">;</span> i  <span class="token operator">&lt;</span>  builtins_count<span class="token punctuation">;</span> <span class="token operator">++</span>i<span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">strcmp</span><span class="token punctuation">(</span>builtins<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">,</span> input<span class="token punctuation">)</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token keyword">return</span>  true<span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">return</span>  false<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token keyword">void</span>  <span class="token function">run_builtin</span><span class="token punctuation">(</span><span class="token keyword">char</span>  <span class="token operator">*</span><span class="token operator">*</span>command<span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">strcmp</span><span class="token punctuation">(</span>command<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token string">"cd"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">cd</span><span class="token punctuation">(</span>command<span class="token punctuation">)</span> <span class="token operator">&lt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+		<span class="token function">perror</span><span class="token punctuation">(</span>command<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">strcmp</span><span class="token punctuation">(</span>command<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token string">"history"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token function">display_history</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>In the main loop, we can add the following snippet</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">check_if_builtin</span><span class="token punctuation">(</span>command<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token function">run_builtin</span><span class="token punctuation">(</span>command<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">continue</span><span class="token punctuation">;</span>	<span class="token comment">// skip the fork</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<h4 id="exit">exit</h4>
+				<p>We add <code>exit</code> and <code>quit</code> commands to gracefully close the shell, by adding the
+					following piece of code.</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span><span class="token function">strcmp</span><span class="token punctuation">(</span>command<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token string">"exit"</span><span class="token punctuation">)</span> <span class="token operator">||</span> <span class="token operator">!</span><span class="token function">strcmp</span><span class="token punctuation">(</span>command<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token string">"quit"</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>We can also implement the <code>Ctrl-D</code> keyboard shortcut (that sends the <code>EOF</code>
+					character) to quit the shell by adding the following snippet to our <code>main</code> function:</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token comment">// exit on ctrl-D</span>
+<span class="token keyword">if</span> <span class="token punctuation">(</span>input <span class="token operator">==</span> <span class="token constant">NULL</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p><strong>NOTE</strong>: Builtins might not work properly with the N-pipes and separators
+					(<code>;</code> and <code>\n</code>) explained below, mainly because they were added much later in
+					the development of the project.</p>
+				<h3 id="ii.2.2-n-pipes">II.2.2 N-Pipes</h3>
+				<p>A pipe is a form of redirection (transfer of standard output to some other destination) that is used
+					in Linux and other Unix-like operating systems to send the output of one command/program/process to
+					another command/program/process for further processing, and this command’s output may act as input
+					to the next command and so on. Unix/Linux systems allow <code>stdout</code> of a command to be
+					connected to <code>stdin</code> of another command, by using the pipe character <code>|</code>.</p>
+				<p>This direct connection between commands/programs/processes allows them to operate simultaneously and
+					permits data to be transferred between them continuously rather than having to pass it through
+					temporary text files or through the display screen. Pipes are unidirectional, i.e data flows from
+					left to right through the pipeline.</p>
+				<p>In the N-pipe implementation of piping, the parent shell forks one child process and then waits for
+					it to complete. The child process is the parent of all the pipe command processes. The child creates
+					two pipes and then calls <code>fork()</code> for each of its children. Each new child process
+					redirects <code>stdin</code>and <code>stdout</code>to a pipe appropriately and calls
+					<code>execvp()</code> to execute the proper command. A process that has been <code>execvp()</code>ed
+					will never return. When the child of the parent shell reaches the last command it simply redirects
+					<code>stdin</code> to the second pipe and <code>execvp()</code>s the last command. The parent waits
+					for this last command to exit. This is very important. The parent shell must wait on the last
+					command to finish before continuing.
+				</p>
+				<p>One important thing to note here is that each process in the pipeline is a child of the original
+					child of the shell. They are not children of each other the further down the pipeline we go. Another
+					thing to note is that only the shell executes a wait, while all the others simply die after they
+					execute their respective command.</p>
+				<p>The process that is the child of the main pipe process is responsible for creating all the needed
+					pipes before it forks off any of its children. Thus, each of children has a set of file descriptors
+					for all pipes in the total pipeline, so it is important to specify for each process exactly which
+					pipe file descriptor among the many it has access to is its <code>stdin</code> and its
+					<code>stdout</code>, using the <code>dup2()</code> system call, and eventually close all file
+					descriptors that comprise its pipes so that the pipes don’t hang.
+				</p>
+				<p>Read below our sample implementation of the N-pipes feature:</p>
+				<pre><code>pipes.c
+</code></pre>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"pipes.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"tokenizer.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;sys/wait.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdlib.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;string.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;unistd.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdio.h&gt;</span></span>
+
+<span class="token keyword">int</span>  <span class="token function">pipes</span><span class="token punctuation">(</span><span class="token keyword">char</span>  <span class="token operator">*</span>input<span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">int</span>  i<span class="token punctuation">,</span> commandc  <span class="token operator">=</span>  <span class="token number">0</span><span class="token punctuation">,</span> numpipes  <span class="token operator">=</span>  <span class="token number">0</span><span class="token punctuation">,</span> status<span class="token punctuation">;</span>
+	pid_t  pid<span class="token punctuation">;</span>
+	<span class="token keyword">char</span>  <span class="token operator">*</span><span class="token operator">*</span>args<span class="token punctuation">;</span>
+	<span class="token keyword">for</span> <span class="token punctuation">(</span>i  <span class="token operator">=</span>  <span class="token number">0</span><span class="token punctuation">;</span> input<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">!=</span>  <span class="token string">'\0'</span><span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>i  <span class="token operator">&gt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>input<span class="token punctuation">[</span>i<span class="token punctuation">]</span> <span class="token operator">==</span>  <span class="token string">'|'</span>  <span class="token operator">&amp;&amp;</span>  input<span class="token punctuation">[</span>i  <span class="token operator">+</span>  <span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">!=</span>  <span class="token string">'|'</span>  <span class="token operator">&amp;&amp;</span>  input<span class="token punctuation">[</span>i  <span class="token operator">-</span>  <span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">!=</span>  <span class="token string">'|'</span><span class="token punctuation">)</span>
+			<span class="token punctuation">{</span>
+				numpipes<span class="token operator">++</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	
+	<span class="token keyword">int</span>  <span class="token operator">*</span>pipefds  <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">int</span>  <span class="token operator">*</span><span class="token punctuation">)</span><span class="token function">malloc</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token number">2</span>  <span class="token operator">*</span>  numpipes<span class="token punctuation">)</span> <span class="token operator">*</span>  <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">int</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">char</span>  <span class="token operator">*</span>token  <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">char</span>  <span class="token operator">*</span><span class="token punctuation">)</span><span class="token function">malloc</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token number">128</span><span class="token punctuation">)</span> <span class="token operator">*</span>  <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">char</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	token  <span class="token operator">=</span>  <span class="token function">strtok_r</span><span class="token punctuation">(</span>input<span class="token punctuation">,</span> <span class="token string">"|"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>input<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token keyword">for</span> <span class="token punctuation">(</span>i  <span class="token operator">=</span>  <span class="token number">0</span><span class="token punctuation">;</span> i  <span class="token operator">&lt;</span>  numpipes<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">pipe</span><span class="token punctuation">(</span>pipefds  <span class="token operator">+</span>  i  <span class="token operator">*</span>  <span class="token number">2</span><span class="token punctuation">)</span> <span class="token operator">&lt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"pipe creation failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">return</span>  <span class="token number">3</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span>
+	<span class="token keyword">do</span>
+	<span class="token punctuation">{</span>
+		pid  <span class="token operator">=</span>  <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>pid  <span class="token operator">==</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span> <span class="token comment">// child process</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>commandc  <span class="token operator">!=</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+			<span class="token punctuation">{</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">dup2</span><span class="token punctuation">(</span>pipefds<span class="token punctuation">[</span><span class="token punctuation">(</span>commandc  <span class="token operator">-</span>  <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">*</span>  <span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">)</span> <span class="token operator">&lt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+				<span class="token punctuation">{</span>
+					<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"child couldnt get input"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+					<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span>commandc  <span class="token operator">!=</span>  numpipes<span class="token punctuation">)</span>
+			<span class="token punctuation">{</span>
+				<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">dup2</span><span class="token punctuation">(</span>pipefds<span class="token punctuation">[</span>commandc  <span class="token operator">*</span>  <span class="token number">2</span>  <span class="token operator">+</span>  <span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">)</span> <span class="token operator">&lt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+				<span class="token punctuation">{</span>
+					<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"child couldnt output"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+					<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token punctuation">}</span>
+			<span class="token punctuation">}</span>
+			
+			<span class="token keyword">for</span> <span class="token punctuation">(</span>i  <span class="token operator">=</span>  <span class="token number">0</span><span class="token punctuation">;</span> i  <span class="token operator">&lt;</span>  <span class="token number">2</span>  <span class="token operator">*</span>  numpipes<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+			<span class="token punctuation">{</span>
+				<span class="token function">close</span><span class="token punctuation">(</span>pipefds<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+			
+			args  <span class="token operator">=</span>  <span class="token function">tokenize</span><span class="token punctuation">(</span>token<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">execvp</span><span class="token punctuation">(</span>args<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> args<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"exec failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>  <span class="token keyword">if</span> <span class="token punctuation">(</span>pid  <span class="token operator">&lt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"fork() failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">return</span>  <span class="token number">3</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span> <span class="token comment">// fork error</span>
+		commandc<span class="token operator">++</span><span class="token punctuation">;</span> <span class="token comment">// parent process</span>
+	<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span>commandc  <span class="token operator">&lt;</span>  numpipes  <span class="token operator">+</span>  <span class="token number">1</span>  <span class="token operator">&amp;&amp;</span> <span class="token punctuation">(</span>token  <span class="token operator">=</span>  <span class="token function">strtok_r</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">,</span> <span class="token string">"|"</span><span class="token punctuation">,</span> <span class="token operator">&amp;</span>input<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token keyword">for</span> <span class="token punctuation">(</span>i  <span class="token operator">=</span>  <span class="token number">0</span><span class="token punctuation">;</span> i  <span class="token operator">&lt;</span>  <span class="token number">2</span>  <span class="token operator">*</span>  numpipes<span class="token punctuation">;</span> i<span class="token operator">++</span><span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token function">close</span><span class="token punctuation">(</span>pipefds<span class="token punctuation">[</span>i<span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	
+	<span class="token function">free</span><span class="token punctuation">(</span>pipefds<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token function">wait</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">)</span> <span class="token operator">&gt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">;</span>
+	<span class="token keyword">return</span>  <span class="token number">1</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>Demo:<br>
+					<img src="./images/pipes.png" alt="enter image description here">
+				</p>
+				<h3 id="ii.2.3-separator">II.2.3 Separator</h3>
+				<p>In order to put two or more commands on the same command line, they can be separated by a semicolon
+					<code>;</code>. All the commands will be executed sequentially waiting for each command to finish
+					before starting the new one.
+				</p>
+				<p>When the shell sees a semicolon <code>;</code> on a command line in interactive mode, it is treated
+					as a command separator or terminator— basically like pressing the ENTER key to execute a command.
+				</p>
+				<p>In order to replicate this functionality in our shell, we will tokenize the input on the semicolon
+					<code>;</code> character iteratively, and on every tokenized command, we fork the main process,
+					execute the command in the child process, while the parent waits for everyone of them to finish.
+				</p>
+				<p><code>separator.c</code></p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdio.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;string.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;sys/wait.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;stdlib.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">&lt;unistd.h&gt;</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"tokenizer.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"pipes.h"</span></span>
+<span class="token macro property">#<span class="token directive keyword">include</span>  <span class="token string">"separator.h"</span></span>
+
+<span class="token keyword">void</span>  <span class="token function">execute_sequence</span><span class="token punctuation">(</span><span class="token keyword">char</span>  <span class="token operator">*</span>input<span class="token punctuation">,</span> <span class="token keyword">char</span><span class="token operator">*</span>  delimiter<span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	pid_t  pid<span class="token punctuation">;</span>
+	<span class="token keyword">char</span>  <span class="token operator">*</span>token  <span class="token operator">=</span> <span class="token punctuation">(</span><span class="token keyword">char</span>  <span class="token operator">*</span><span class="token punctuation">)</span><span class="token function">malloc</span><span class="token punctuation">(</span><span class="token punctuation">(</span><span class="token number">128</span><span class="token punctuation">)</span> <span class="token operator">*</span>  <span class="token keyword">sizeof</span><span class="token punctuation">(</span><span class="token keyword">char</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">char</span>  <span class="token operator">*</span><span class="token operator">*</span>command<span class="token punctuation">;</span>
+	token  <span class="token operator">=</span>  <span class="token function">strtok_r</span><span class="token punctuation">(</span>input<span class="token punctuation">,</span> delimiter<span class="token punctuation">,</span> <span class="token operator">&amp;</span>input<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">do</span>
+	<span class="token punctuation">{</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">strchr</span><span class="token punctuation">(</span>token<span class="token punctuation">,</span> <span class="token string">'|'</span><span class="token punctuation">)</span> <span class="token operator">!=</span>  <span class="token constant">NULL</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token function">pipes</span><span class="token punctuation">(</span>token<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">continue</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		pid  <span class="token operator">=</span>  <span class="token function">fork</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span>pid  <span class="token operator">==</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			command  <span class="token operator">=</span>  <span class="token function">tokenize</span><span class="token punctuation">(</span>token<span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token function">execvp</span><span class="token punctuation">(</span>command<span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">,</span> command<span class="token punctuation">)</span> <span class="token operator">&lt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+			<span class="token punctuation">{</span>
+				<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"execution failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+				<span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			<span class="token punctuation">}</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>  <span class="token keyword">if</span> <span class="token punctuation">(</span>pid  <span class="token operator">&lt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">{</span>
+			<span class="token function">perror</span><span class="token punctuation">(</span><span class="token string">"fork failed"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+		<span class="token keyword">else</span>
+		<span class="token punctuation">{</span>
+			<span class="token function">wait</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token punctuation">}</span>
+	<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span>token  <span class="token operator">=</span>  <span class="token function">strtok_r</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">,</span> delimiter<span class="token punctuation">,</span> <span class="token operator">&amp;</span>input<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	
+	<span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token function">wait</span><span class="token punctuation">(</span><span class="token constant">NULL</span><span class="token punctuation">)</span> <span class="token operator">&gt;</span>  <span class="token number">0</span><span class="token punctuation">)</span>
+		<span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>Demo:<br>
+					<img src="./images/semicolon.png" alt="enter image description here">
+				</p>
+				<h3 id="ii.2.4-batch-mode">II.2.4 Batch mode</h3>
+				<p>In order to support batch mode, where the shell is started by specifying a batch file containing the
+					list of commands that should be executed separated by a line break, we can use the same
+					<code>execute_sequence()</code> function defined above in the <code>separator.c</code> file, but
+					using the line feed character <code>\n</code> as the delimiter.
+				</p>
+				<p>In our <code>main.c</code> function, we check if the executable was passed a command-line argument to
+					run in batch mode, or run in interactive mode otherwise. We then read the batch file if it exists,
+					and pass its content to the <code>execute_sequence()</code> function.</p>
+				<p>We add the following block of code to the main function.</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">if</span> <span class="token punctuation">(</span>argc  <span class="token operator">&gt;</span>  <span class="token number">2</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"0 or 1 arguments expected.\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span>  <span class="token number">1</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token keyword">else</span>  <span class="token keyword">if</span> <span class="token punctuation">(</span>argv<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span>  <span class="token function">access</span><span class="token punctuation">(</span>argv<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> F_OK<span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token function">printf</span><span class="token punctuation">(</span><span class="token string">"Batch file does not exist\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span>  <span class="token number">1</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span class="token keyword">else</span>  <span class="token keyword">if</span> <span class="token punctuation">(</span>argv<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span>  <span class="token operator">!</span><span class="token function">access</span><span class="token punctuation">(</span>argv<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> F_OK<span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">do</span>
+	<span class="token punctuation">{</span>
+		FILE  <span class="token operator">*</span>fp<span class="token punctuation">;</span>
+		<span class="token keyword">long</span>  lSize<span class="token punctuation">;</span>
+		<span class="token keyword">char</span>  <span class="token operator">*</span>buffer<span class="token punctuation">;</span>
+		fp  <span class="token operator">=</span>  <span class="token function">fopen</span><span class="token punctuation">(</span>argv<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token string">"rb"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>fp<span class="token punctuation">)</span>
+			<span class="token function">perror</span><span class="token punctuation">(</span>argv<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			
+		<span class="token function">fseek</span><span class="token punctuation">(</span>fp<span class="token punctuation">,</span> <span class="token number">0L</span><span class="token punctuation">,</span> <span class="token constant">SEEK_END</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		lSize  <span class="token operator">=</span>  <span class="token function">ftell</span><span class="token punctuation">(</span>fp<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">rewind</span><span class="token punctuation">(</span>fp<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		
+		<span class="token comment">/* allocate memory for entire content */</span>
+		buffer  <span class="token operator">=</span>  <span class="token function">calloc</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> lSize  <span class="token operator">+</span>  <span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>buffer<span class="token punctuation">)</span>
+			<span class="token function">fclose</span><span class="token punctuation">(</span>fp<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token function">fputs</span><span class="token punctuation">(</span><span class="token string">"memory alloc fails"</span><span class="token punctuation">,</span> <span class="token constant">stderr</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			
+		<span class="token comment">/* copy the file into the buffer */</span>
+		<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token number">1</span>  <span class="token operator">!=</span>  <span class="token function">fread</span><span class="token punctuation">(</span>buffer<span class="token punctuation">,</span> lSize<span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> fp<span class="token punctuation">)</span><span class="token punctuation">)</span>
+			<span class="token function">fclose</span><span class="token punctuation">(</span>fp<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token function">free</span><span class="token punctuation">(</span>buffer<span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token function">fputs</span><span class="token punctuation">(</span><span class="token string">"entire read fails"</span><span class="token punctuation">,</span> <span class="token constant">stderr</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token function">exit</span><span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+			
+		<span class="token function">execute_sequence</span><span class="token punctuation">(</span>buffer<span class="token punctuation">,</span> <span class="token string">"\n"</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">fclose</span><span class="token punctuation">(</span>fp<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token function">free</span><span class="token punctuation">(</span>buffer<span class="token punctuation">)</span><span class="token punctuation">;</span>
+		<span class="token keyword">break</span><span class="token punctuation">;</span>
+		
+	<span class="token punctuation">}</span> <span class="token keyword">while</span> <span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+	<span class="token keyword">return</span>  <span class="token number">0</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>Demo:<br>
+					<img src="./images/batch.png" alt="enter image description here">
+				</p>
+				<h3 id="ii.2.5-signals">II.2.5 Signals</h3>
+				<h4 id="what-is-a-signal">What is a signal?</h4>
+				<p>A signal is a software interrupt that is sent out to a process from an external event, either by by
+					the kernel, by another process or by itself. A very common example is <code>SIGINT</code>, which is
+					the signal that is sent out when you hit <code>Ctrl-C</code> to exit a program.</p>
+				<center><img src="./images/signal.png" alt="enter image description here"></center>
+				<p>In the diagram above, the process receives an external signal after the second instruction, hence
+					<em>interrupting</em> its the regular execution to pass it to the <em>signal handler</em>, a
+					predefined function that is invoked whenever a signal is received.
+				</p>
+				<p>Currently, if we send the <code>SIGINT</code> signal by pressing <code>Ctrl-C</code> before a command
+					finishes running (like <code>sleep 10</code>), not only the program command quits, but our shell as
+					well. The same behavior occurs if we send the <code>SIGSTP</code> signal generated by the
+					<code>Ctrl-Z</code> keyboard shortcut. This is because our shell is using the operating system’s
+					default signal handlers, which we can thankfully override in our C code.
+				</p>
+				<p>Before we get to the code, we will introduce two important concepts: <em>signal masks</em> and
+					<em>non-local jumps</em>.
+				</p>
+				<h4 id="signal-masks">Signal masks</h4>
+				<p>For every process running in the system, the kernel maintains a <strong>signal mask</strong>, which
+					blocks any signal that is added to it from being delivered, which can be useful when we wan to block
+					signals based on application logic.</p>
+				<p>Let us consider, for example, that the <em>signal handler</em> gets invoked and is executing its
+					instructions, then another signal invokes this same signal handler once again, which will interrupt
+					the execution of the original signal interrupt, and this is not very desirable.</p>
+				<p>This is why, in order to prevent a signal handler from interrupting itself, the original signal that
+					invoked the signal handler should be added to the signal mask, and should only be removed once the
+					signal handler returns</p>
+				<h4 id="non-local-jumps">Non-local Jumps</h4>
+				<p>When our shell encounters <code>Ctrl-C</code>, the execution of the command currently running should
+					be interrupted, restarting the main while loop from the top, and displaying the shell prompt.
+					Effectively, <code>Ctrl-C</code> would mean a soft reset of the command line. This brings us to the
+					functions <code>sigsetjmp()</code> and <code>siglongjmp()</code>, which are used to perform a
+					<code>non local jump</code>. They are equivalent to a <code>goto</code>, but are not restricted
+					within the scope of the function.
+				</p>
+				<p>The <code>sigsetjmp(sigjmp_buf env, int savesigs)</code> function sets a jump point and takes a
+					buffer of type <code>sigjmp_buf</code> which is used to store details like the stack pointer and the
+					instruction pointer. It also accepts a flag <code>savesigs</code>. If the value of this flag is non
+					zero, then <code>sigsetjmp()</code> saves the current process signal mask and restores it when
+					<code>siglongjmp()</code> is invoked. This means, that the signal which initially gets blocked on
+					invoking the signal handler, gets unblocked as soon as <code>siglongjmp()</code> is invoked.
+				</p>
+				<p>The <code>siglongjmp(sigjmp_buf env, int val)</code> function uses the buffer which contains values
+					saved by <code>sigsetjmp()</code> to determine the jump point in the program. Additionally it takes
+					an integer value, which is returned when the code returns to the jump point.</p>
+				<p>In order to guarantee that a signal will only be delivered after the jump point has been set, we add
+					a global flag that is <code>false</code> by default. Once the jump point has been set, we set the
+					flag to <code>true</code> and add a check on this flag in our signal handler. If the flag is
+					<code>false</code>, we skip the call to <code>siglongjmp()</code> and return from the handler
+					instead.
+				</p>
+				<p><strong>IMPORTANT</strong>: It is essential that this flag is of type
+					<code>volatile sig_atomic_t</code>, since it will be accessed asynchronously by multiple threads of
+					the process, i.e. the main thread and the signal handler thread. The type guarantees atomic access
+					to the variable across multiple threads.
+				</p>
+				<h4 id="the-code">The code</h4>
+				<p>We are now ready to handle signals and interrupts in our program. We will take advantage of the
+					<code>sigaction</code> struct an <code>sigaction()</code> function available in the
+					<code>signal.h</code> library.
+				</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">struct</span> sigaction <span class="token punctuation">{</span>
+    <span class="token keyword">void</span>     <span class="token punctuation">(</span><span class="token operator">*</span>sa_handler<span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token keyword">int</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">void</span>     <span class="token punctuation">(</span><span class="token operator">*</span>sa_sigaction<span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token keyword">int</span><span class="token punctuation">,</span> siginfo_t <span class="token operator">*</span><span class="token punctuation">,</span> <span class="token keyword">void</span> <span class="token operator">*</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    sigset_t   sa_mask<span class="token punctuation">;</span>
+    <span class="token keyword">int</span>        sa_flags<span class="token punctuation">;</span>
+    <span class="token keyword">void</span>     <span class="token punctuation">(</span><span class="token operator">*</span>sa_restorer<span class="token punctuation">)</span><span class="token punctuation">(</span><span class="token keyword">void</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span><span class="token punctuation">;</span>
+</code></pre>
+				<p>The struct requires:</p>
+				<ul>
+					<li><code>sa_handler</code>: A pointer to the signal handler.</li>
+					<li><code>sa_sigaction</code>: A pointer to a signal handler that can access more information
+						regarding the signal. Either one of <code>sa_handler</code> or <code>sa_sigaction</code> should
+						be used.</li>
+					<li><code>sa_mask</code>: An optional set of signals which are blocked while the signal handler is
+						executing.</li>
+					<li><code>sa_flags</code>: A <code>bitwise OR</code> of config flags.</li>
+					<li><code>sa_restorer</code>: This is for internal use and should not be set.</li>
+				</ul>
+				<p>Now let us look at the signature of the <code>sigaction()</code> function:</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">int</span> <span class="token function">sigaction</span><span class="token punctuation">(</span><span class="token keyword">int</span> signum<span class="token punctuation">,</span> <span class="token keyword">const</span> <span class="token keyword">struct</span> sigaction <span class="token operator">*</span>act<span class="token punctuation">,</span> <span class="token keyword">struct</span> sigaction <span class="token operator">*</span>oldact<span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre>
+				<p>It accepts the signal number and two <code>sigaction struct</code> objects. The first contains new
+					configuration to be set, while the second is used to save the current configuration before
+					overwriting it with the new one.</p>
+				<p>In our <code>main.c</code> file, we add the 2 following functions:</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">void</span> <span class="token function">sigint_handler</span><span class="token punctuation">(</span><span class="token keyword">int</span> signo<span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">!</span>jump_active<span class="token punctuation">)</span>
+	<span class="token punctuation">{</span>
+		<span class="token keyword">return</span><span class="token punctuation">;</span>
+	<span class="token punctuation">}</span>
+	<span class="token function">siglongjmp</span><span class="token punctuation">(</span>env<span class="token punctuation">,</span> <span class="token number">42</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// SIGINT setup</span>
+<span class="token keyword">void</span> <span class="token function">sigint_setup</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+<span class="token punctuation">{</span>
+	<span class="token keyword">struct</span> sigaction s<span class="token punctuation">;</span>
+	s<span class="token punctuation">.</span>sa_handler <span class="token operator">=</span> sigint_handler<span class="token punctuation">;</span>
+	<span class="token function">sigemptyset</span><span class="token punctuation">(</span><span class="token operator">&amp;</span>s<span class="token punctuation">.</span>sa_mask<span class="token punctuation">)</span><span class="token punctuation">;</span>
+	s<span class="token punctuation">.</span>sa_flags <span class="token operator">=</span> SA_RESTART<span class="token punctuation">;</span>
+	<span class="token function">sigaction</span><span class="token punctuation">(</span>SIGINT<span class="token punctuation">,</span> <span class="token operator">&amp;</span>s<span class="token punctuation">,</span> <span class="token constant">NULL</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre>
+				<p>where <code>env</code> and <code>jump_active</code> are 2 static global variables declared as</p>
+				<pre class=" language-c"><code class="prism  language-c"><span class="token keyword">static</span> sigjmp_buf env<span class="token punctuation">;</span>
+<span class="token keyword">static</span> <span class="token keyword">volatile</span> sig_atomic_t jump_active <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span>
+</code></pre>
+				<p>And in order to enable signal handling in our program, it boils down to calling the
+					<code>sigint_setup()</code> at the start of the main process as well as for every forked child.
+				</p>
+				<h1 id="iii.-conclusion">III. Conclusion</h1>
+				<p>Obviously, the shell we created is not feature-rich and is missing some important features available
+					in other Unix shells, from output redirection (like <code>&gt;</code>, <code>&gt;&gt;</code>,
+					<code>&lt;</code>, …) to symbolic tables, scripting capabilities, and the huge set of builtin
+					commands that make other Unix shells (notably <em>bash</em> and <em>zsh</em>) as powerful as they
+					are. The implementation of all of this stuff is really interesting, but way more than we could ever
+					fit in a project like this.
+				</p>
+				<dl>
+					<dt>Resources</dt>
+					<dd><a href="https://www.tutorialspoint.com/unix/unix-what-is-shell.htm">Unix/Linux: What is a
+							Shell</a></dd>
+					<dd><a href="https://www.cs.cornell.edu/courses/cs414/2004su/homework/shell/shell.html">Cornell
+							CS414: Writing Your Own Shell</a></dd>
+					<dd><a href="https://www.geeksforgeeks.org/making-linux-shell-c/">Making your own Linux Shell in
+							C</a></dd>
+					<dd><a href="https://hackernoon.com/u/MIMA">Mohammed Isam’s articles on HackerNoon</a></dd>
+				</dl>
+				<p><strong>Special thanks to Dr. Ghaoui</strong></p>
+				<dl>
+					<dt>Authors</dt>
+					<dd>AVEDIS Razmig<br>
+						EID Charbel<br>
+						EID Peter</dd>
+				</dl>
+
+			</div>
+		</div>
+	</body>
+
+</html>

@@ -1,0 +1,11 @@
+# Executables and extension-less files
+*
+!*/
+!*.*
+!Makefile
+
+# Object files
+[Oo]bj/
+
+# Visual Studio Code
+.vscode/
